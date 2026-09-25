@@ -12,6 +12,11 @@ class LogisticsRepository(private val database: AppDatabase) {
     val allOrders: Flow<List<BookingOrder>> = orderDao.getAllOrders()
     val activeOrder: Flow<BookingOrder?> = orderDao.getActiveOrder()
     val allDrivers: Flow<List<DriverKyc>> = driverDao.getAllDrivers()
+    val pendingOrders: Flow<List<BookingOrder>> = orderDao.getPendingOrders()
+    val approvedDrivers: Flow<List<DriverKyc>> = driverDao.getApprovedDrivers()
+
+    fun getDriversByAvailability(availability: String): Flow<List<DriverKyc>> =
+        driverDao.getDriversByAvailability(availability)
 
     fun getOrderById(orderId: String): Flow<BookingOrder?> = orderDao.getOrderById(orderId)
 
@@ -37,5 +42,30 @@ class LogisticsRepository(private val database: AppDatabase) {
 
     suspend fun insertDriver(driver: DriverKyc) {
         driverDao.insertDriver(driver)
+    }
+
+    suspend fun updateDriverAvailability(driverId: String, availability: String, orderId: String? = null) {
+        driverDao.updateDriverAvailability(driverId, availability, orderId)
+    }
+
+    suspend fun assignDriverToOrder(
+        order: BookingOrder,
+        driver: DriverKyc
+    ) {
+        // 1. Assign driver in Room database orders table
+        orderDao.assignDriverToOrder(
+            orderId = order.id,
+            driverId = driver.driverId,
+            driverName = driver.name,
+            driverPhone = driver.phone,
+            driverVehicleNumber = driver.vehicleNumber
+        )
+        // 2. Mark driver as BUSY and map assigned order in driver_kyc table
+        driverDao.assignDriverToOrder(driver.driverId, order.id)
+    }
+
+    suspend fun unassignDriver(orderId: String, driverId: String) {
+        orderDao.unassignDriverFromOrder(orderId)
+        driverDao.unassignDriver(driverId)
     }
 }

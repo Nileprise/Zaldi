@@ -29,6 +29,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.AddAlert
 import androidx.compose.material.icons.filled.AssignmentTurnedIn
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Call
@@ -69,6 +70,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -79,6 +82,8 @@ import com.example.data.model.DriverLocationData
 import com.example.data.model.UserRole
 import com.example.ui.components.DeliveryStatusBadge
 import com.example.ui.components.DeliveryStatusType
+import com.example.ui.components.DriverAvailabilityCard
+import com.example.ui.components.DriverAvailabilityStatus
 import com.example.ui.components.GoogleMapsView
 import com.example.ui.components.ProofOfDeliveryDialog
 import com.example.ui.components.RoleSwitcherPill
@@ -126,6 +131,7 @@ fun DriverDashboardScreen(
     isServiceRunning: Boolean = false,
     onOpenLiveMap: () -> Unit = {},
     onOpenProfile: () -> Unit = {},
+    onSendTestNotification: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showKycModal by remember { mutableStateOf(false) }
@@ -139,6 +145,8 @@ fun DriverDashboardScreen(
     var selectedFilter by remember { mutableStateOf(DriverCardFilter.ALL) }
 
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -196,89 +204,45 @@ fun DriverDashboardScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 6.dp)
         ) {
-            // Driver Profile Header Card
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onOpenProfile() }
-                    .testTag("driver_profile_header_card"),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(46.dp)
-                            .background(AmberContainer, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.LocalShipping,
-                            contentDescription = "Driver Avatar",
-                            tint = AmberPrimary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-
-                    Column(modifier = Modifier.padding(start = 12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "Ravi Kumar",
-                                fontSize = 17.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TextDark
-                            )
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = SuccessContainer,
-                                modifier = Modifier.padding(start = 6.dp)
-                            ) {
-                                Text(
-                                    text = "GOLD",
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Black,
-                                    color = SuccessGreen,
-                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
-                                )
-                            }
-                        }
-                        Text(
-                            text = "Tata Ace • KA 05 MX 2190 • View Profile ›",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = LogisticsBlue
-                        )
-                    }
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = SurfaceCard,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderLight),
-                    modifier = Modifier.clickable { onOpenProfile() }.testTag("driver_kyc_badge")
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = "Driver Profile",
-                            tint = AmberPrimary,
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Text(
-                            text = "Profile",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextDark,
-                            modifier = Modifier.padding(start = 4.dp)
-                        )
-                    }
-                }
+            // Driver Information & Availability Status Card
+            val currentDriverStatus = when {
+                assignedOrder != null -> DriverAvailabilityStatus.IN_TRANSIT
+                isOnline -> DriverAvailabilityStatus.AVAILABLE
+                else -> DriverAvailabilityStatus.OFF_DUTY
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            DriverAvailabilityCard(
+                driverName = "Ravi Kumar",
+                availabilityStatus = currentDriverStatus,
+                driverId = "DRV-101",
+                phoneNumber = "+91 98452 11094",
+                vehicleType = "Tata Ace (Mini Truck)",
+                vehicleNumber = "KA 05 MX 2190",
+                rating = 4.88,
+                completedTrips = completedOrders.size.coerceAtLeast(142),
+                currentArea = "Indiranagar, Bengaluru",
+                assignedOrderId = assignedOrder?.id,
+                assignedOrderRoute = assignedOrder?.let { "${it.pickupAddress.split(",")[0]} → ${it.dropoffAddress.split(",")[0]}" },
+                assignedOrderGoodsType = assignedOrder?.goodsType,
+                assignedOrderFare = assignedOrder?.fare,
+                showStatusControls = true,
+                showContactActions = false,
+                isKycApproved = true,
+                onStatusChange = { newStatus ->
+                    when (newStatus) {
+                        DriverAvailabilityStatus.AVAILABLE, DriverAvailabilityStatus.IN_TRANSIT -> {
+                            if (!isOnline) handleToggleWithPermissions()
+                        }
+                        DriverAvailabilityStatus.OFF_DUTY -> {
+                            if (isOnline) handleToggleWithPermissions()
+                        }
+                    }
+                },
+                onClick = onOpenProfile,
+                modifier = Modifier
+                    .padding(bottom = 14.dp)
+                    .testTag("driver_profile_header_card")
+            )
 
             // Online / Offline Switcher Card
             Card(
@@ -343,6 +307,75 @@ fun DriverDashboardScreen(
                         ),
                         modifier = Modifier.testTag("driver_status_switch")
                     )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Dispatch Availability Status & Test Alert Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("driver_availability_status_card"),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = SurfaceCard),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "DISPATCH AVAILABILITY",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 1.sp,
+                            color = AmberPrimary
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(top = 2.dp)
+                        ) {
+                            val availabilityText = if (!isOnline) "OFFLINE" else if (assignedOrder != null && assignedOrder.status != "DELIVERED") "BUSY (ON TRIP)" else "AVAILABLE FOR ASSIGNMENT"
+                            val availabilityColor = if (!isOnline) TextMuted else if (assignedOrder != null && assignedOrder.status != "DELIVERED") LogisticsBlue else SuccessGreen
+                            Box(modifier = Modifier.size(8.dp).background(availabilityColor, CircleShape))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = availabilityText,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = availabilityColor
+                            )
+                        }
+                        if (assignedOrder != null && assignedOrder.status != "DELIVERED") {
+                            Text(
+                                text = "Mapped Order: #${assignedOrder.id} • ${assignedOrder.goodsType}",
+                                fontSize = 11.sp,
+                                color = TextMuted,
+                                modifier = Modifier.padding(top = 2.dp)
+                            )
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = onSendTestNotification,
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                        modifier = Modifier.testTag("driver_test_alert_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AddAlert,
+                            contentDescription = "Test Notification",
+                            tint = AmberPrimary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Test Alert", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AmberPrimary)
+                    }
                 }
             }
 
@@ -1674,6 +1707,8 @@ fun DriverDashboardScreen(
     if (showOtpDialog && assignedOrder != null) {
         AlertDialog(
             onDismissRequest = {
+                focusManager.clearFocus()
+                keyboardController?.hide()
                 showOtpDialog = false
                 otpError = false
             },
@@ -1720,6 +1755,8 @@ fun DriverDashboardScreen(
                 Button(
                     onClick = {
                         if (enteredOtp == assignedOrder.startOtp || enteredOtp == "1234") {
+                            focusManager.clearFocus()
+                            keyboardController?.hide()
                             onUpdateOrderStatus(assignedOrder.id, "IN_TRANSIT")
                             showOtpDialog = false
                             enteredOtp = ""
@@ -1734,7 +1771,11 @@ fun DriverDashboardScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showOtpDialog = false }) {
+                TextButton(onClick = {
+                    focusManager.clearFocus()
+                    keyboardController?.hide()
+                    showOtpDialog = false
+                }) {
                     Text("Cancel")
                 }
             }

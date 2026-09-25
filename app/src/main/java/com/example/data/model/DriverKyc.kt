@@ -18,5 +18,8 @@ data class DriverKyc(
     val rating: Double = 4.85,
     val completedTrips: Int = 142,
     val earningsToday: Double = 1840.0,
-    val pendingPayout: Double = 6420.0
+    val pendingPayout: Double = 6420.0,
+    val availabilityStatus: String = "AVAILABLE", // AVAILABLE, BUSY, OFFLINE
+    val assignedOrderId: String? = null,
+    val currentArea: String = "Indiranagar, Bengaluru"
 )

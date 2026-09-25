@@ -71,6 +71,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.data.model.BookingOrder
+import com.example.ui.components.DriverAvailabilityCard
+import com.example.ui.components.DriverAvailabilityStatus
 import com.example.ui.theme.AmberContainer
 import com.example.ui.theme.AmberPrimary
 import com.example.ui.theme.BorderLight
@@ -185,6 +187,37 @@ fun DriverProfileScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
+            // Driver Information & Availability Status Component
+            val currentStatus = if (isOnline) DriverAvailabilityStatus.AVAILABLE else DriverAvailabilityStatus.OFF_DUTY
+
+            DriverAvailabilityCard(
+                driverName = driverName,
+                availabilityStatus = currentStatus,
+                driverId = "DRV-101",
+                phoneNumber = driverPhone,
+                vehicleType = vehicleModel,
+                vehicleNumber = vehicleNumber,
+                rating = 4.88,
+                completedTrips = totalDeliveriesCount,
+                currentArea = "Indiranagar, Bengaluru",
+                showStatusControls = true,
+                showContactActions = false,
+                isKycApproved = true,
+                onStatusChange = { newStatus ->
+                    when (newStatus) {
+                        DriverAvailabilityStatus.AVAILABLE, DriverAvailabilityStatus.IN_TRANSIT -> {
+                            if (!isOnline) handleToggleWithPermissions()
+                        }
+                        DriverAvailabilityStatus.OFF_DUTY -> {
+                            if (isOnline) handleToggleWithPermissions()
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .padding(bottom = 16.dp)
+                    .testTag("profile_driver_availability_card")
+            )
+
             // ==========================================
             // 1. ONLINE / OFFLINE TOGGLE CARD
             // ==========================================

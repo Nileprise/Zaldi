@@ -38,7 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.DriverLocationData
-import com.example.ui.components.GoogleMapsView
+import com.example.ui.components.SimulatedMapView
 import com.example.ui.theme.AmberContainer
 import com.example.ui.theme.AmberPrimary
 import com.example.ui.theme.LogisticsBlue
@@ -68,15 +68,14 @@ fun LiveMapScreen(
             .fillMaxSize()
             .background(Color(0xFFE8ECEF))
     ) {
-        // Fullscreen Google Map
-        GoogleMapsView(
+        // High-Performance Fast Interactive Vector Map
+        SimulatedMapView(
             driverLocation = driverLocation,
             modifier = Modifier.fillMaxSize(),
-            pickupLatLng = LatLng(12.9784, 77.6408),
-            dropoffLatLng = LatLng(12.9352, 77.6245),
-            pickupTitle = "Pickup: Indiranagar 100ft Rd",
-            dropoffTitle = "Drop-off: Koramangala 4th Block",
-            isInteractive = true
+            isTrackingActiveRide = true,
+            pickupName = "Indiranagar 100ft Rd",
+            dropoffName = "Koramangala 4th Block",
+            etaMinutes = 11
         )
 
         // Top Header Bar
@@ -109,7 +108,7 @@ fun LiveMapScreen(
                     }
                     Column(modifier = Modifier.padding(start = 4.dp)) {
                         Text(
-                            text = "Google Maps SDK Telemetry",
+                            text = "Live Fleet Telemetry",
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                             color = TextDark
@@ -134,7 +133,7 @@ fun LiveMapScreen(
                     color = LogisticsBlueContainer
                 ) {
                     Text(
-                        text = "SDK v19.1",
+                        text = "GPS Active",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         color = LogisticsBlue,

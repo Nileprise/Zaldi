@@ -19,6 +19,12 @@ interface OrderDao {
     @Query("SELECT * FROM orders WHERE status NOT IN ('DELIVERED', 'CANCELLED') ORDER BY timestamp DESC LIMIT 1")
     fun getActiveOrder(): Flow<BookingOrder?>
 
+    @Query("SELECT * FROM orders WHERE status IN ('PENDING', 'SEARCHING') ORDER BY timestamp DESC")
+    fun getPendingOrders(): Flow<List<BookingOrder>>
+
+    @Query("SELECT * FROM orders WHERE assignedDriverId = :driverId AND status NOT IN ('DELIVERED', 'CANCELLED') ORDER BY timestamp DESC LIMIT 1")
+    fun getActiveOrderByDriver(driverId: String): Flow<BookingOrder?>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrder(order: BookingOrder)
 
@@ -28,6 +34,21 @@ interface OrderDao {
     @Query("UPDATE orders SET status = :status WHERE id = :orderId")
     suspend fun updateOrderStatus(orderId: String, status: String)
 
+    @Query("UPDATE orders SET status = 'DRIVER_ASSIGNED', assignedDriverId = :driverId, driverName = :driverName, driverPhone = :driverPhone, driverVehicleNumber = :driverVehicleNumber WHERE id = :orderId")
+    suspend fun assignDriverToOrder(
+        orderId: String,
+        driverId: String,
+        driverName: String,
+        driverPhone: String,
+        driverVehicleNumber: String
+    )
+
+    @Query("UPDATE orders SET status = 'PENDING', assignedDriverId = NULL WHERE id = :orderId")
+    suspend fun unassignDriverFromOrder(orderId: String)
+
     @Query("DELETE FROM orders WHERE id = :orderId")
     suspend fun deleteOrder(orderId: String)
+
+    @Query("DELETE FROM orders WHERE id LIKE 'AKH-77291' OR id LIKE 'AKH-88312' OR id LIKE 'AKH-91045' OR id LIKE 'AKH-94218' OR id LIKE 'AKH-61842' OR id LIKE 'AKH-55209' OR id LIKE 'AKH-48310'")
+    suspend fun clearDemoOrders()
 }

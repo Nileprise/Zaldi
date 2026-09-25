@@ -1,15 +1,20 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Traffic
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -36,6 +41,7 @@ import com.example.data.model.DriverLocationData
 import com.example.ui.theme.AmberPrimary
 import com.example.ui.theme.LogisticsBlue
 import com.example.ui.theme.SuccessGreen
+import com.example.ui.theme.TextDark
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
@@ -75,16 +81,63 @@ fun GoogleMapsView(
         position = CameraPosition.fromLatLngZoom(currentDriverLatLng, 14.5f)
     }
 
-    // Auto-pan camera smoothly when driver moves in interactive mode
-    LaunchedEffect(currentDriverLatLng) {
-        cameraPositionState.animate(
-            CameraUpdateFactory.newLatLng(currentDriverLatLng),
-            durationMs = 800
-        )
-    }
-
     var mapType by remember { mutableStateOf(MapType.NORMAL) }
     var isTrafficEnabled by remember { mutableStateOf(true) }
+    var isVectorFallback by remember { mutableStateOf(true) }
+
+    // Auto-pan camera smoothly when driver moves in interactive mode
+    LaunchedEffect(currentDriverLatLng, isVectorFallback) {
+        if (!isVectorFallback) {
+            runCatching {
+                cameraPositionState.animate(
+                    CameraUpdateFactory.newLatLng(currentDriverLatLng),
+                    durationMs = 800
+                )
+            }
+        }
+    }
+
+    if (isVectorFallback) {
+        Box(modifier = modifier.fillMaxSize().clip(RoundedCornerShape(18.dp))) {
+            SimulatedMapView(
+                modifier = Modifier.fillMaxSize(),
+                isTrackingActiveRide = true,
+                pickupName = pickupTitle,
+                dropoffName = dropoffTitle,
+                driverLocation = driverLocation
+            )
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = Color.White.copy(alpha = 0.95f),
+                shadowElevation = 2.dp,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .clickable { isVectorFallback = false }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Map,
+                        contentDescription = "Google Maps",
+                        tint = AmberPrimary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Google Maps SDK",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextDark
+                    )
+                }
+            }
+        }
+        return
+    }
 
     val mapProperties = remember(mapType, isTrafficEnabled) {
         MapProperties(
@@ -182,6 +235,38 @@ fun GoogleMapsView(
         if (isInteractive) {
             Box(
                 modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(12.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color.White.copy(alpha = 0.95f),
+                    shadowElevation = 3.dp,
+                    modifier = Modifier.clickable { isVectorFallback = true }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Map,
+                            contentDescription = "Vector Map",
+                            tint = LogisticsBlue,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Vector Map",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = LogisticsBlue
+                        )
+                    }
+                }
+            }
+
+            Box(
+                modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(12.dp)
             ) {
@@ -208,10 +293,12 @@ fun GoogleMapsView(
                 FloatingActionButton(
                     onClick = {
                         coroutineScope.launch {
-                            cameraPositionState.animate(
-                                CameraUpdateFactory.newLatLngZoom(currentDriverLatLng, 16f),
-                                durationMs = 600
-                            )
+                            runCatching {
+                                cameraPositionState.animate(
+                                    CameraUpdateFactory.newLatLngZoom(currentDriverLatLng, 16f),
+                                    durationMs = 600
+                                )
+                            }
                         }
                     },
                     containerColor = AmberPrimary,

@@ -56,6 +56,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -91,7 +93,9 @@ fun ActiveRideScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    var isGoogleMapsMode by remember { mutableStateOf(true) }
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    var isGoogleMapsMode by remember { mutableStateOf(false) }
     var showSosDialog by remember { mutableStateOf(false) }
     var showChatDialog by remember { mutableStateOf(false) }
     var showCallDialog by remember { mutableStateOf(false) }
@@ -483,6 +487,10 @@ fun ActiveRideScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column {
+                            Text(text = "DISTANCE", fontSize = 10.sp, color = TextMuted, fontWeight = FontWeight.Bold)
+                            Text(text = "${order.distanceKm} km", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AmberPrimary)
+                        }
+                        Column {
                             Text(text = "GOODS TYPE", fontSize = 10.sp, color = TextMuted, fontWeight = FontWeight.Bold)
                             Text(text = order.goodsType, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextDark)
                         }
@@ -631,7 +639,11 @@ fun ActiveRideScreen(
     // In-App Chat Dialog
     if (showChatDialog) {
         AlertDialog(
-            onDismissRequest = { showChatDialog = false },
+            onDismissRequest = {
+                focusManager.clearFocus()
+                keyboardController?.hide()
+                showChatDialog = false
+            },
             title = { Text("Chat with Ravi Kumar", fontWeight = FontWeight.Bold) },
             text = {
                 Column(modifier = Modifier.fillMaxWidth()) {
@@ -677,7 +689,11 @@ fun ActiveRideScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showChatDialog = false }) {
+                TextButton(onClick = {
+                    focusManager.clearFocus()
+                    keyboardController?.hide()
+                    showChatDialog = false
+                }) {
                     Text("Close")
                 }
             }

@@ -53,6 +53,15 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.BookingOrder
 import com.example.data.model.DriverKyc
 import com.example.data.model.UserRole
+import android.content.Context
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.material3.TabRowDefaults
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.example.ui.components.DriverManagementHub
 import com.example.ui.components.RoleSwitcherPill
 import com.example.ui.theme.AmberContainer
 import com.example.ui.theme.AmberPrimary
@@ -80,10 +89,17 @@ fun AdminPanelScreen(
     onSetPricingMultiplier: (Float) -> Unit,
     onApproveKyc: (String) -> Unit,
     onRejectKyc: (String) -> Unit,
+    pendingOrders: List<BookingOrder> = emptyList(),
+    onAssignDriver: (BookingOrder, DriverKyc, Context) -> Unit = { _, _, _ -> },
+    onUnassignDriver: (String, String) -> Unit = { _, _ -> },
+    onSetDriverAvailability: (String, String) -> Unit = { _, _ -> },
+    onAutoDispatch: (Context) -> Unit = {},
+    onSendTestNotification: (Context) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val pendingKycCount = drivers.count { it.status == "PENDING" }
     val activeRidesCount = orders.count { it.status != "DELIVERED" && it.status != "CANCELLED" }
+    var selectedTab by remember { mutableStateOf(0) }
 
     Column(
         modifier = modifier
@@ -96,57 +112,128 @@ fun AdminPanelScreen(
             onRoleSelected = onRoleSelected
         )
 
+        // Sub Navigation Tabs for Driver Dispatch vs Operations
+        TabRow(
+            selectedTabIndex = selectedTab,
+            containerColor = Color.White,
+            contentColor = AmberPrimary,
+            indicator = { tabPositions ->
+                TabRowDefaults.SecondaryIndicator(
+                    Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                    color = AmberPrimary,
+                    height = 3.dp
+                )
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Tab(
+                selected = selectedTab == 0,
+                onClick = { selectedTab = 0 },
+                text = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Driver & Dispatch",
+                            fontSize = 12.sp,
+                            fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Medium
+                        )
+                        if (pendingOrders.isNotEmpty()) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Surface(
+                                shape = CircleShape,
+                                color = AmberPrimary
+                            ) {
+                                Text(
+                                    text = pendingOrders.size.toString(),
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                )
+                            }
+                        }
+                    }
+                },
+                modifier = Modifier.testTag("admin_tab_dispatch")
+            )
+            Tab(
+                selected = selectedTab == 1,
+                onClick = { selectedTab = 1 },
+                text = {
+                    Text(
+                        text = "Operations & Surge Hub",
+                        fontSize = 12.sp,
+                        fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Medium
+                    )
+                },
+                modifier = Modifier.testTag("admin_tab_operations")
+            )
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 6.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
-            // Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = "CONTROL CENTER",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = 1.2.sp,
-                        color = AmberPrimary
-                    )
-                    Text(
-                        text = "Fleet Operations Hub",
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = TextDark
-                    )
-                    Text(
-                        text = "Bengaluru City Sector • Live Monitoring",
-                        fontSize = 12.sp,
-                        color = TextMuted
-                    )
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = SuccessContainer
+            if (selectedTab == 0) {
+                // Driver Management Hub (Maps active drivers to pending delivery requests & availability)
+                DriverManagementHub(
+                    drivers = drivers,
+                    pendingOrders = pendingOrders,
+                    allOrders = orders,
+                    onAssignDriver = onAssignDriver,
+                    onUnassignDriver = onUnassignDriver,
+                    onSetDriverAvailability = onSetDriverAvailability,
+                    onAutoDispatch = onAutoDispatch,
+                    onSendTestNotification = onSendTestNotification
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+            } else {
+                // Operations & Surge Hub
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(modifier = Modifier.size(8.dp).background(SuccessGreen, CircleShape))
+                    Column {
                         Text(
-                            text = " LIVE",
+                            text = "CONTROL CENTER",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = SuccessGreen
+                            letterSpacing = 1.2.sp,
+                            color = AmberPrimary
+                        )
+                        Text(
+                            text = "Fleet Operations Hub",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = TextDark
+                        )
+                        Text(
+                            text = "Bengaluru City Sector • Live Monitoring",
+                            fontSize = 12.sp,
+                            color = TextMuted
                         )
                     }
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = SuccessContainer
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(modifier = Modifier.size(8.dp).background(SuccessGreen, CircleShape))
+                            Text(
+                                text = " LIVE",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = SuccessGreen
+                            )
+                        }
+                    }
                 }
-            }
 
             Spacer(modifier = Modifier.height(14.dp))
 
@@ -393,6 +480,7 @@ fun AdminPanelScreen(
             }
 
             Spacer(modifier = Modifier.height(24.dp))
+            }
         }
     }
 }

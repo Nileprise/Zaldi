@@ -12,12 +12,16 @@ import com.example.data.model.UserRole
 import com.example.data.model.VehicleCatalog
 import com.example.data.repository.LogisticsRepository
 import com.example.service.LocationManager
+import com.example.util.DeliveryNotificationHelper
+import com.example.util.DistanceCalculator
+import com.example.util.RouteDistanceInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import kotlin.random.Random
 
 class LogisticsViewModel(application: Application) : AndroidViewModel(application) {
@@ -50,6 +54,45 @@ class LogisticsViewModel(application: Application) : AndroidViewModel(applicatio
     private val _dropoffAddress = MutableStateFlow("Koramangala 4th Block, Bengaluru")
     val dropoffAddress: StateFlow<String> = _dropoffAddress.asStateFlow()
 
+    // Exact calculated distance and route information
+    private var _customDistanceKm: Double? = null
+    private val _routeDistanceInfo = MutableStateFlow(
+        DistanceCalculator.calculateExactDistance(
+            _pickupAddress.value,
+            _dropoffAddress.value
+        )
+    )
+    val routeDistanceInfo: StateFlow<RouteDistanceInfo> = _routeDistanceInfo.asStateFlow()
+
+    private fun updateCalculatedDistance() {
+        val custom = _customDistanceKm
+        if (custom != null) {
+            val estMin = DistanceCalculator.calculateEstimatedMinutes(custom)
+            _routeDistanceInfo.value = RouteDistanceInfo(
+                distanceKm = custom,
+                estimatedDurationMinutes = estMin,
+                viaRoad = "Adjusted Exact Corridor ($custom km)",
+                routeSummary = "$custom km • ~$estMin mins"
+            )
+        } else {
+            _routeDistanceInfo.value = DistanceCalculator.calculateExactDistance(
+                _pickupAddress.value,
+                _dropoffAddress.value
+            )
+        }
+    }
+
+    fun setCustomDistance(km: Double) {
+        val clamped = (kotlin.math.max(1.0, km) * 10.0).roundToInt() / 10.0
+        _customDistanceKm = clamped
+        updateCalculatedDistance()
+    }
+
+    fun resetDistanceToAuto() {
+        _customDistanceKm = null
+        updateCalculatedDistance()
+    }
+
     private val _selectedVehicleId = MutableStateFlow("tata")
     val selectedVehicleId: StateFlow<String> = _selectedVehicleId.asStateFlow()
 
@@ -65,6 +108,14 @@ class LogisticsViewModel(application: Application) : AndroidViewModel(applicatio
     // Driver specific state
     private val _isDriverOnline = MutableStateFlow(true)
     val isDriverOnline: StateFlow<Boolean> = _isDriverOnline.asStateFlow()
+
+    // Live heads-up delivery alert state (in-app banner)
+    private val _activeDeliveryAlert = MutableStateFlow<DeliveryAlertData?>(null)
+    val activeDeliveryAlert: StateFlow<DeliveryAlertData?> = _activeDeliveryAlert.asStateFlow()
+
+    fun dismissDeliveryAlert() {
+        _activeDeliveryAlert.value = null
+    }
 
     // Live GPS telemetry from background service
     val driverLocation: StateFlow<DriverLocationData?> = LocationManager.currentLocation
@@ -93,6 +144,20 @@ class LogisticsViewModel(application: Application) : AndroidViewModel(applicatio
         )
 
     val allDrivers: StateFlow<List<DriverKyc>> = repository.allDrivers
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    val pendingOrders: StateFlow<List<BookingOrder>> = repository.pendingOrders
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    val approvedDrivers: StateFlow<List<DriverKyc>> = repository.approvedDrivers
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
@@ -129,10 +194,14 @@ class LogisticsViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun setPickup(address: String) {
         _pickupAddress.value = address
+        _customDistanceKm = null
+        updateCalculatedDistance()
     }
 
     fun setDropoff(address: String) {
         _dropoffAddress.value = address
+        _customDistanceKm = null
+        updateCalculatedDistance()
     }
 
     fun setVehicle(vehicleId: String) {
@@ -173,11 +242,14 @@ class LogisticsViewModel(application: Application) : AndroidViewModel(applicatio
         _pricingMultiplier.value = multiplier
     }
 
-    fun calculateEstimatedFare(vehicleId: String, distanceKm: Double = 6.4): Double {
+    fun calculateEstimatedFare(
+        vehicleId: String,
+        distanceKm: Double = _routeDistanceInfo.value.distanceKm
+    ): Double {
         val tier = VehicleCatalog.tiers.find { it.id == vehicleId } ?: VehicleCatalog.tiers[0]
         val helperCost = if (_isHelperRequired.value) 80.0 else 0.0
         val baseCalculated = (tier.baseFare + (distanceKm * tier.perKmRate) + helperCost) * _pricingMultiplier.value
-        return (baseCalculated * 10.0).toInt() / 10.0
+        return (baseCalculated * 10.0).roundToInt() / 10.0
     }
 
     fun bookRide(
@@ -185,7 +257,8 @@ class LogisticsViewModel(application: Application) : AndroidViewModel(applicatio
     ) {
         viewModelScope.launch {
             val tier = VehicleCatalog.tiers.find { it.id == _selectedVehicleId.value } ?: VehicleCatalog.tiers[2]
-            val distance = 6.4
+            val routeInfo = _routeDistanceInfo.value
+            val distance = routeInfo.distanceKm
             val fare = calculateEstimatedFare(tier.id, distance)
             val randomId = "AKH-" + Random.nextInt(10000, 99999)
             val randomOtp = (Random.nextInt(1000, 9000) + 1000).toString()
@@ -210,7 +283,7 @@ class LogisticsViewModel(application: Application) : AndroidViewModel(applicatio
                 driverRating = 4.88,
                 driverVehicleNumber = "KA 05 MX 2190",
                 startOtp = randomOtp,
-                etaMinutes = tier.etaMinutes
+                etaMinutes = routeInfo.estimatedDurationMinutes
             )
             repository.createOrder(order)
             _driverIncomingRequest.value = order
@@ -313,4 +386,128 @@ class LogisticsViewModel(application: Application) : AndroidViewModel(applicatio
             repository.updateKycStatus(driverId, status)
         }
     }
+
+    fun setDriverAvailability(driverId: String, availability: String) {
+        viewModelScope.launch {
+            repository.updateDriverAvailability(driverId, availability)
+        }
+    }
+
+    fun assignDriverToDelivery(
+        order: BookingOrder,
+        driver: DriverKyc,
+        context: Context? = null,
+        onComplete: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            repository.assignDriverToOrder(order, driver)
+
+            val assignedOrder = order.copy(
+                status = "DRIVER_ASSIGNED",
+                assignedDriverId = driver.driverId,
+                driverName = driver.name,
+                driverPhone = driver.phone,
+                driverVehicleNumber = driver.vehicleNumber
+            )
+
+            // Trigger local notification to alert the driver of new delivery request
+            val ctx = context ?: getApplication<Application>().applicationContext
+            DeliveryNotificationHelper.notifyDriverAssignment(
+                context = ctx,
+                order = assignedOrder,
+                driverName = driver.name
+            )
+
+            _activeDeliveryAlert.value = DeliveryAlertData(
+                order = assignedOrder,
+                driverName = driver.name
+            )
+
+            // If the assigned driver is the active demo driver (Ravi Kumar), update live prompt
+            if (driver.driverId == "DRV-101") {
+                _driverIncomingRequest.value = assignedOrder
+            }
+
+            onComplete()
+        }
+    }
+
+    fun unassignDriverFromDelivery(orderId: String, driverId: String) {
+        viewModelScope.launch {
+            repository.unassignDriver(orderId, driverId)
+            if (driverId == "DRV-101" && _driverIncomingRequest.value?.id == orderId) {
+                _driverIncomingRequest.value = null
+            }
+        }
+    }
+
+    fun autoDispatchPendingOrders(context: Context? = null) {
+        viewModelScope.launch {
+            val pending = pendingOrders.value
+            val available = allDrivers.value.filter { it.status == "APPROVED" && it.availabilityStatus == "AVAILABLE" }
+            val ctx = context ?: getApplication<Application>().applicationContext
+
+            var idx = 0
+            for (order in pending) {
+                if (idx < available.size) {
+                    val driver = available[idx]
+                    repository.assignDriverToOrder(order, driver)
+                    val assignedOrder = order.copy(
+                        status = "DRIVER_ASSIGNED",
+                        assignedDriverId = driver.driverId,
+                        driverName = driver.name,
+                        driverPhone = driver.phone,
+                        driverVehicleNumber = driver.vehicleNumber
+                    )
+                    DeliveryNotificationHelper.notifyDriverAssignment(
+                        context = ctx,
+                        order = assignedOrder,
+                        driverName = driver.name
+                    )
+                    _activeDeliveryAlert.value = DeliveryAlertData(
+                        order = assignedOrder,
+                        driverName = driver.name
+                    )
+                    if (driver.driverId == "DRV-101") {
+                        _driverIncomingRequest.value = assignedOrder
+                    }
+                    idx++
+                }
+            }
+        }
+    }
+
+    fun sendTestDriverNotification(context: Context) {
+        val activeOrFirst = allOrders.value.firstOrNull() ?: BookingOrder(
+            id = "AKH-49210",
+            customerPhone = "+91 99999 11111",
+            customerName = "Priya Sharma",
+            pickupAddress = "Indiranagar 100ft Rd, Bengaluru",
+            dropoffAddress = "Koramangala 4th Block, Bengaluru",
+            vehicleTierId = "tata",
+            vehicleName = "Tata Ace",
+            goodsType = "Electronics & Machine Tooling",
+            helperRequired = true,
+            helperFee = 80.0,
+            fare = 420.0,
+            distanceKm = 6.4,
+            paymentMethod = "Online UPI",
+            status = "DRIVER_ASSIGNED"
+        )
+        DeliveryNotificationHelper.notifyDriverAssignment(
+            context = context,
+            order = activeOrFirst,
+            driverName = "Ravi Kumar"
+        )
+        _activeDeliveryAlert.value = DeliveryAlertData(
+            order = activeOrFirst,
+            driverName = "Ravi Kumar"
+        )
+    }
 }
+
+data class DeliveryAlertData(
+    val order: BookingOrder,
+    val driverName: String,
+    val timestamp: Long = System.currentTimeMillis()
+)

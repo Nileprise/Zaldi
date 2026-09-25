@@ -26,5 +26,6 @@ data class BookingOrder(
     val driverVehicleNumber: String = "KA 05 MX 2190",
     val startOtp: String = "4821",
     val timestamp: Long = System.currentTimeMillis(),
-    val etaMinutes: Int = 12
+    val etaMinutes: Int = 12,
+    val assignedDriverId: String? = null
 )

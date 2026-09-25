@@ -27,4 +27,22 @@ interface DriverDao {
 
     @Query("UPDATE driver_kyc SET status = :status WHERE driverId = :driverId")
     suspend fun updateKycStatus(driverId: String, status: String)
+
+    @Query("SELECT * FROM driver_kyc WHERE status = 'APPROVED' ORDER BY name ASC")
+    fun getApprovedDrivers(): Flow<List<DriverKyc>>
+
+    @Query("SELECT * FROM driver_kyc WHERE availabilityStatus = :availability")
+    fun getDriversByAvailability(availability: String): Flow<List<DriverKyc>>
+
+    @Query("UPDATE driver_kyc SET availabilityStatus = :availability WHERE driverId = :driverId")
+    suspend fun updateAvailabilityStatus(driverId: String, availability: String)
+
+    @Query("UPDATE driver_kyc SET availabilityStatus = :availability, assignedOrderId = :orderId WHERE driverId = :driverId")
+    suspend fun updateDriverAvailability(driverId: String, availability: String, orderId: String?)
+
+    @Query("UPDATE driver_kyc SET assignedOrderId = :orderId, availabilityStatus = 'BUSY' WHERE driverId = :driverId")
+    suspend fun assignDriverToOrder(driverId: String, orderId: String)
+
+    @Query("UPDATE driver_kyc SET assignedOrderId = NULL, availabilityStatus = 'AVAILABLE' WHERE driverId = :driverId")
+    suspend fun unassignDriver(driverId: String)
 }
